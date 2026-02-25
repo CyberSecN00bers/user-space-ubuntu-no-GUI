@@ -30,21 +30,7 @@ if [[ -z "$MANAGER_ADDR" ]]; then
 fi
 
 HOST_SHORT="$(hostname -s 2>/dev/null || hostname)"
-UNIQ_ID=""
-if [[ -r /sys/class/dmi/id/product_uuid ]]; then
-  UNIQ_ID="$(tr -cd 'A-Za-z0-9' < /sys/class/dmi/id/product_uuid | head -c 12)"
-fi
-if [[ -z "$UNIQ_ID" && -r /etc/machine-id ]]; then
-  UNIQ_ID="$(tr -cd 'A-Za-z0-9' < /etc/machine-id | head -c 12)"
-fi
-
-if [[ -n "$UNIQ_ID" ]]; then
-  BASE_NAME="${HOST_SHORT}-${UNIQ_ID}"
-else
-  BASE_NAME="${HOST_SHORT}"
-fi
-
-BASE_NAME="$(printf '%s' "$BASE_NAME" | tr -c 'A-Za-z0-9._-' '-')"
+BASE_NAME="$(printf '%s' "$HOST_SHORT" | tr -c 'A-Za-z0-9._-' '-')"
 AGENT_NAME="$BASE_NAME"
 
 if [[ -f "$CLIENT_KEYS" ]]; then
@@ -56,27 +42,15 @@ fi
 
 rm -f "$CLIENT_KEYS" >/dev/null 2>&1 || true
 
-attempts=3
-delay=5
-for i in $(seq 1 "$attempts"); do
-  if [[ "$i" -gt 1 ]]; then
-    AGENT_NAME="${BASE_NAME}-${i}"
-  fi
+out="$("$AGENT_AUTH" -m "$MANAGER_ADDR" -p "$AUTH_PORT" -A "$AGENT_NAME" 2>&1)" && {
+  log "Enrolled agent as ${AGENT_NAME}"
+  exit 0
+}
 
-  out="$("$AGENT_AUTH" -m "$MANAGER_ADDR" -p "$AUTH_PORT" -A "$AGENT_NAME" 2>&1)" && {
-    log "Enrolled agent as ${AGENT_NAME}"
-    exit 0
-  }
+if echo "$out" | grep -qi "Duplicate agent name"; then
+  log "Duplicate agent name ${AGENT_NAME}; skipping"
+  exit 0
+fi
 
-  if echo "$out" | grep -qi "Duplicate agent name"; then
-    log "Duplicate agent name ${AGENT_NAME}; retrying"
-  else
-    log "agent-auth failed: ${out}"
-  fi
-
-  sleep "$delay"
-  delay=$((delay * 2))
-done
-
-log "Enrollment failed after ${attempts} attempts; skipping"
+log "agent-auth failed: ${out}"
 exit 0

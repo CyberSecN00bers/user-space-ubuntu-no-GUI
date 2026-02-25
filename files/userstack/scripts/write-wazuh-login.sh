@@ -21,7 +21,7 @@ fi
 
 read -r agent_id agent_name _ < "$KEYFILE"
 
-raw_user="${agent_name}-${agent_id}"
+raw_user="${agent_name}"
 username="$(printf '%s' "$raw_user" | tr -c 'A-Za-z0-9._-' '-' | sed 's/--*/-/g; s/^-//; s/-$//')"
 
 for entry in "${OUTPUT_TARGETS[@]}"; do
