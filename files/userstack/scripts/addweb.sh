@@ -16,12 +16,34 @@ trap on_err ERR
 
 require_cmd() { command -v "$1" >/dev/null 2>&1 || die "Missing required command: $1"; }
 
+strip_quotes() {
+  local v="$1"
+  if [[ "$v" == \"*\" && "$v" == *\" ]]; then
+    v="${v:1:${#v}-2}"
+  elif [[ "$v" == \'*\' && "$v" == *\' ]]; then
+    v="${v:1:${#v}-2}"
+  fi
+  printf '%s' "$v"
+}
+
 load_env() {
   [[ -f "$ENV_FILE" ]] || die "Missing ${ENV_FILE}. Please create it from .env.example."
-  set -a
-  # shellcheck disable=SC1090
-  . "$ENV_FILE"
-  set +a
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ -z "$line" ]] && continue
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+
+    case "$line" in
+      ADMIN_USERNAME=*|ADMIN_PASSWORD=*|NEW_ADMIN_PASSWORD=*|API_PORT=*|API_BASE=*)
+        key="${line%%=*}"
+        val="${line#*=}"
+        val="$(strip_quotes "$val")"
+        export "$key=$val"
+        ;;
+      *)
+        ;;
+    esac
+  done < "$ENV_FILE"
 }
 
 get_primary_ip() {
