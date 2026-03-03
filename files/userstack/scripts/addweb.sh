@@ -5,7 +5,7 @@ ENV_FILE="/opt/capstone-userstack/.env"
 
 log() { echo "[*] $*" >&2; }
 die() { echo "[!]" "$*" >&2; exit 1; }
-usage() { echo "Usage: addweb <domain> <port>" >&2; }
+usage() { echo "Usage: addweb <domain> <port>  (or addweb <domain>:<port> for systemd template)" >&2; }
 
 on_err() {
   local exit_code=$?
@@ -191,14 +191,28 @@ create_domain() {
   return 1
 }
 
+parse_args() {
+  local arg="$1"
+
+  if [[ $# -eq 2 ]]; then
+    echo "$1" "$2"
+    return 0
+  fi
+
+  if [[ $# -eq 1 && "$arg" == *:* ]]; then
+    echo "${arg%%:*}" "${arg##*:}"
+    return 0
+  fi
+
+  return 1
+}
+
 main() {
-  if [[ $# -ne 2 ]]; then
+  local domain port
+  if ! read -r domain port < <(parse_args "$@"); then
     usage
     exit 1
   fi
-
-  local domain="$1"
-  local port="$2"
 
   if [[ -z "$domain" ]]; then
     die "Domain is required."

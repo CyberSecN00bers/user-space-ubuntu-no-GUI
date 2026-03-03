@@ -119,6 +119,12 @@ if [[ -f "$USERSTACK_DST/scripts/addweb.sh" ]]; then
   ln -sf "$USERSTACK_DST/scripts/addweb.sh" /usr/local/bin/addweb
   chmod +x /usr/local/bin/addweb || true
 fi
+if command -v systemctl >/dev/null 2>&1; then
+  if [[ -f "$USERSTACK_DST/scripts/addweb@.service" ]]; then
+    install -m 0644 "$USERSTACK_DST/scripts/addweb@.service" /etc/systemd/system/addweb@.service
+    systemctl daemon-reload >/dev/null 2>&1 || true
+  fi
+fi
 
 echo "[5.1/7] Configure Wazuh agent auto-enroll"
 WAZUH_CONF="/var/ossec/etc/ossec.conf"
