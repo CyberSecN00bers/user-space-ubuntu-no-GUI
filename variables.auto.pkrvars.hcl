@@ -13,7 +13,7 @@ hostname             = "ubuntu-userstack"
 cores              = 4
 memory             = 6144
 ballooning_minimum = 0
-disk_size          = "30G"
+disk_size          = "50G"
 
 # Ubuntu Server ISO (amd64) + checksum
 iso_url      = "https://releases.ubuntu.com/22.04/ubuntu-22.04.5-live-server-amd64.iso"
