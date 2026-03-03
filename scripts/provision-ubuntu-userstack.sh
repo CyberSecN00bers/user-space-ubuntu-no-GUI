@@ -114,6 +114,12 @@ fi
 
 chmod +x "$USERSTACK_DST/scripts"/*.sh || true
 
+install -d -m 0755 /usr/local/bin
+if [[ -f "$USERSTACK_DST/scripts/addweb.sh" ]]; then
+  ln -sf "$USERSTACK_DST/scripts/addweb.sh" /usr/local/bin/addweb
+  chmod +x /usr/local/bin/addweb || true
+fi
+
 echo "[5.1/7] Configure Wazuh agent auto-enroll"
 WAZUH_CONF="/var/ossec/etc/ossec.conf"
 USERSTACK_WAZUH_CONF="${USERSTACK_DST}/config/ossec.conf"
