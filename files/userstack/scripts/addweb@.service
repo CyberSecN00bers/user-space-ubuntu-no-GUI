@@ -1,9 +1,0 @@
-[Unit]
-Description=Add web domain via nginx-love API (%i)
-Wants=network-online.target
-After=network-online.target
-
-[Service]
-Type=oneshot
-ExecStart=/usr/local/bin/addweb %i
-
