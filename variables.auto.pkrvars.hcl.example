@@ -1,0 +1,14 @@
+proxmox_skip_tls_verify = true
+proxmox_username="root@pam!packer"
+
+vm_storage      = "hdd-lvm"
+proxmox_storage = "local-lvm"
+iso_storage     = "hdd-data"
+
+cores              = 4
+memory             = 6144
+ballooning_minimum = 0
+disk_size          = "30G"
+
+lan_vlan_tag = 99
+task_timeout = "2h"

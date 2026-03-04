@@ -27,8 +27,8 @@ source "proxmox-iso" "ubuntu-server" {
   boot_iso {
     type = "scsi"
 
-    iso_url          = var.iso_url
-    iso_checksum     = var.iso_checksum
+    iso_url          = "https://releases.ubuntu.com/22.04/ubuntu-22.04.5-live-server-amd64.iso"
+    iso_checksum     = "file:https://releases.ubuntu.com/22.04/SHA256SUMS"
     iso_storage_pool = var.iso_storage
     iso_download_pve = true
     unmount          = true
