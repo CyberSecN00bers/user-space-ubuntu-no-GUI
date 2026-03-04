@@ -19,9 +19,9 @@ source "proxmox-iso" "ubuntu-server" {
   task_timeout = var.task_timeout
 
   # VM general
-  vm_id                = var.template_vm_id
-  vm_name              = var.template_name
-  template_description = var.template_description
+  vm_id                = 0
+  vm_name              = "tpl-ubuntu-server"
+  template_description = "Ubuntu Server (Capstone)"
   os                   = "l26"
 
   boot_iso {

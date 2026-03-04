@@ -44,7 +44,7 @@ variable "bridge_lan" {
 
 variable "lan_vlan_tag" {
   type    = number
-  default = 0
+  default = 10
 }
 
 variable "ssh_public_key" {
@@ -55,19 +55,6 @@ variable "ssh_public_key" {
 variable "ssh_private_key_file" {
   type    = string
   default = env("PACKER_SSH_PRIVATE_KEY")
-}
-
-variable "template_vm_id" {
-  type = number
-}
-
-variable "template_name" {
-  type = string
-}
-
-variable "template_description" {
-  type    = string
-  default = "Ubuntu Server (Capstone)"
 }
 
 variable "hostname" {
@@ -98,10 +85,6 @@ variable "ballooning_minimum" {
 variable "disk_size" {
   type    = string
   default = "30G"
-}
-
-variable "iso_url" {
-  type = string
 }
 
 variable "iso_checksum" {
