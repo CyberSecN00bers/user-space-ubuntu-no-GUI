@@ -84,7 +84,7 @@ variable "ballooning_minimum" {
 
 variable "disk_size" {
   type    = string
-  default = "30G"
+  default = "100G"
 }
 
 variable "iso_checksum" {
