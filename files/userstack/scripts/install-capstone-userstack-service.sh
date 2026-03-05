@@ -28,6 +28,10 @@ if [[ -f "${ENV_EXAMPLE}" && ! -f "${ENV_FILE}" ]]; then
   cp "${ENV_EXAMPLE}" "${ENV_FILE}"
 fi
 
+if [[ -x "${STACK_DIR}/scripts/update-capstone-userstack-env.sh" ]]; then
+  "${STACK_DIR}/scripts/update-capstone-userstack-env.sh" >/dev/null 2>&1 || true
+fi
+
 retry() {
   local attempts="$1"
   local delay="$2"

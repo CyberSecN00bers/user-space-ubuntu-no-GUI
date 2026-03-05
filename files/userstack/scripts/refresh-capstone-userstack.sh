@@ -23,6 +23,10 @@ if systemctl list-unit-files docker.service --no-legend 2>/dev/null | awk '{prin
   systemctl start docker.service >/dev/null 2>&1 || true
 fi
 
+if [[ -x "${STACK_DIR}/scripts/update-capstone-userstack-env.sh" ]]; then
+  "${STACK_DIR}/scripts/update-capstone-userstack-env.sh" >/dev/null 2>&1 || true
+fi
+
 cd "${STACK_DIR}"
 docker compose down -v >/dev/null 2>&1 || true
 
