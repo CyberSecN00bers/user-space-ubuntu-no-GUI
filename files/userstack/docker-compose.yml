@@ -134,16 +134,11 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       NEW_ADMIN_PASSWORD: ${NEW_ADMIN_PASSWORD}
       TOTP_CODE: "${TOTP_CODE:-}"
-      PROXY_CONTAINER: "nginx-love-backend"
-      DVWA_CONTAINER: "dvwa"
-      AUTO_CONNECT_NETWORK: "true"
     depends_on:
       postgres-nginx-love:
         condition: service_healthy
       backend:
         condition: service_healthy
-      dvwa:
-        condition: service_started
     entrypoint: ["/bin/sh"]
     command:
       - -c
@@ -185,20 +180,6 @@ services:
           echo "[bootstrap] done -> removing self"
           docker rm -f "$$SELF_NAME" >/dev/null 2>&1 || true
           exit 0
-  dvwa:
-    image: vulnerables/web-dvwa
-    container_name: dvwa
-    restart: unless-stopped
-    environment:
-      - TZ=${TZ:-Asia/Ho_Chi_Minh}
-    volumes:
-      - ./config/mysql-logging.cnf:/mysql-logging.cnf:ro
-      - ./logs/mysql:/var/log/mysql
-      - ./logs/apache:/var/log/apache2
-      - ./fim/dvwa_upload:/var/www/html/hackable/uploads
-    networks:
-      - capstone-dmz-network
-
 volumes:
   postgres_nginx_love_data:
     driver: local

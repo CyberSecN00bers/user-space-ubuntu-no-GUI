@@ -12,11 +12,6 @@ ADMIN_PASSWORD="${ADMIN_PASSWORD:-admin123}"
 NEW_ADMIN_PASSWORD="${NEW_ADMIN_PASSWORD:-Changeme123!}"
 TOTP_CODE="${TOTP_CODE:-}"
 
-PROXY_CONTAINER="${PROXY_CONTAINER:-blueteam_stack-nginx-1}"
-DVWA_CONTAINER="${DVWA_CONTAINER:-dvwa}"
-
-AUTO_CONNECT_NETWORK="${AUTO_CONNECT_NETWORK:-true}"
-
 log() { echo "[*] $*" >&2; }
 die() { echo "[!]" "$*" >&2; exit 1; }
 
@@ -28,65 +23,6 @@ on_err() {
 trap on_err ERR
 
 require_cmd() { command -v "$1" >/dev/null 2>&1 || die "Missing required command: $1"; }
-
-# ==============================
-# Docker helpers
-# ==============================
-container_running() {
-  local c="$1"
-  docker inspect -f '{{.State.Running}}' "$c" 2>/dev/null | grep -qi '^true$'
-}
-
-container_networks() {
-  local c="$1"
-  docker inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}{{"\n"}}{{end}}' "$c" 2>/dev/null || true
-}
-
-find_common_network() {
-  local a="$1" b="$2" net
-  while IFS= read -r net; do
-    [[ -z "$net" ]] && continue
-    if docker inspect -f "{{if index .NetworkSettings.Networks \"$net\"}}yes{{end}}" "$b" 2>/dev/null | grep -q '^yes$'; then
-      echo "$net"
-      return 0
-    fi
-  done < <(container_networks "$a")
-  return 1
-}
-
-container_ip_on_network() {
-  local c="$1" net="$2"
-  docker inspect -f "{{(index .NetworkSettings.Networks \"$net\").IPAddress}}" "$c" 2>/dev/null || true
-}
-
-resolve_upstream_ip() {
-  local proxy="$1" target="$2"
-
-  container_running "$proxy" || die "Proxy container not running or not found: $proxy"
-  container_running "$target" || die "Target container not running or not found: $target"
-
-  local common_net=""
-  common_net="$(find_common_network "$proxy" "$target" || true)"
-
-  if [[ -z "$common_net" && "$AUTO_CONNECT_NETWORK" == "true" ]]; then
-    local target_net=""
-    target_net="$(container_networks "$target" | head -n 1 || true)"
-    if [[ -n "$target_net" ]]; then
-      log "No common network between '$proxy' and '$target'. Connecting proxy to '$target_net'..."
-      docker network connect "$target_net" "$proxy" >/dev/null 2>&1 || true
-      common_net="$(find_common_network "$proxy" "$target" || true)"
-    fi
-  fi
-
-  [[ -n "$common_net" ]] || die "No common Docker network between '$proxy' and '$target' (and auto-connect failed)."
-
-  local ip=""
-  ip="$(container_ip_on_network "$target" "$common_net")"
-  [[ -n "$ip" ]] || die "Could not resolve IP of '$target' on network '$common_net'."
-
-  log "Resolved '$target' IP on '$common_net' => $ip"
-  echo "$ip"
-}
 
 # ==============================
 # HTTP helpers
@@ -197,50 +133,6 @@ disable_all_custom_rules() {
 }
 
 # ==============================
-# Payload builders
-# ==============================
-build_domain_payload() {
-  local domain_name="$1" upstream_ip="$2" upstream_port="$3"
-
-  jq -n --arg name "$domain_name" --arg host "$upstream_ip" --argjson port "$upstream_port" '
-  {
-    name: $name,
-    status: "active",
-    modsecEnabled: false,
-    upstreams: [
-      {
-        host: $host,
-        port: $port,
-        protocol: "http",
-        sslVerify: false,
-        weight: 1,
-        maxFails: 3,
-        failTimeout: 30
-      }
-    ],
-    loadBalancer: {
-      algorithm: "round_robin",
-      healthCheckEnabled: true,
-      healthCheckInterval: 30,
-      healthCheckTimeout: 5,
-      healthCheckPath: "/"
-    },
-    realIpConfig: {
-      realIpEnabled: false,
-      realIpCloudflare: false,
-      realIpCustomCidrs: []
-    },
-    advancedConfig: {
-      hstsEnabled: false,
-      http2Enabled: true,
-      grpcEnabled: false,
-      clientMaxBodySize: 100,
-      customLocations: []
-    }
-  }'
-}
-
-# ==============================
 # Auth flow
 # ==============================
 change_password_first_login() {
@@ -345,60 +237,14 @@ login_with_fallback() {
   die "Login failed with both ADMIN_PASSWORD and NEW_ADMIN_PASSWORD."
 }
 
-# ==============================
-# Domain creation
-# ==============================
-create_domain() {
-  local token="$1" payload="$2"
-  local name resp ok msg
-
-  name="$(echo "$payload" | jq -r '.name // "unknown"' 2>/dev/null || echo "unknown")"
-  log "Creating domain '$name' via /domains ..."
-
-  resp="$(curl_json "POST" "$API_BASE/domains" "$payload" "$token")" || return 1
-
-  echo "$resp" | jq . >/dev/null 2>&1 || {
-    log "Create domain response is not valid JSON:"
-    printf '%s\n' "$resp" >&2
-    return 1
-  }
-
-  ok="$(echo "$resp" | jq -r '.success // false' 2>/dev/null || echo false)"
-  msg="$(echo "$resp" | jq -r '.message // ""' 2>/dev/null || echo "")"
-
-  if [[ "$ok" == "true" ]]; then
-    log "Domain '$name' created."
-    echo "$resp" | jq .
-    return 0
-  fi
-
-  # Treat "already exists" as success (idempotent)
-  if echo "$msg" | grep -Eqi 'already exists|exists|duplicate|unique'; then
-    log "Domain '$name' already exists. Skipping."
-    return 0
-  fi
-
-  log "Create domain failed. Response:"
-  echo "$resp" | jq . >&2 || true
-  return 1
-}
-
 main() {
   require_cmd curl
   require_cmd jq
-  require_cmd docker
 
   [[ -n "${ADMIN_PASSWORD:-}" ]] || die "ADMIN_PASSWORD is required (set it in .env or environment)."
   if [[ -z "${NEW_ADMIN_PASSWORD:-}" ]]; then
     NEW_ADMIN_PASSWORD="$ADMIN_PASSWORD"
   fi
-
-  log "=== Step 0: Resolve upstream IP (from container name) ==="
-  local dvwa_ip
-  dvwa_ip="$(resolve_upstream_ip "$PROXY_CONTAINER" "$DVWA_CONTAINER")"
-
-  local DOMAIN_DVWA_PAYLOAD
-  DOMAIN_DVWA_PAYLOAD="$(build_domain_payload "dvwa.local" "$dvwa_ip" 80)"
 
   log "=== Step 1: Login & (if required) change admin password ==="
   local token
@@ -408,9 +254,6 @@ main() {
   log "=== Step 2: Disable all ModSecurity rules ==="
   disable_all_crs_rules "$token"
   disable_all_custom_rules "$token"
-
-  log "=== Step 3: Create dvwa.local ==="
-  create_domain "$token" "$DOMAIN_DVWA_PAYLOAD"
 
   log "Bootstrap completed."
 }

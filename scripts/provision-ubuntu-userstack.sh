@@ -104,8 +104,6 @@ cp -a "$USERSTACK_SRC"/. "$USERSTACK_DST"/
 mkdir -p \
   "$USERSTACK_DST/logs/nginx" \
   "$USERSTACK_DST/logs/modsecurity" \
-  "$USERSTACK_DST/logs/apache" \
-  "$USERSTACK_DST/logs/mysql" \
   "$USERSTACK_DST/logs/postgres"
 
 if [[ -f "$USERSTACK_DST/.env.example" && ! -f "$USERSTACK_DST/.env" ]]; then

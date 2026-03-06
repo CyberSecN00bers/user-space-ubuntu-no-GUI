@@ -5,8 +5,6 @@ STACK_DIR="${CAPSTONE_STACK_DIR:-/opt/capstone-userstack}"
 ENV_FILE="${STACK_DIR}/.env"
 ENV_EXAMPLE="${STACK_DIR}/.env.example"
 BOOTSTRAP_SCRIPT="${STACK_DIR}/scripts/bootstrap-nginx_love.sh"
-PROXY_CONTAINER_DEFAULT="nginx-love-backend"
-DVWA_CONTAINER_DEFAULT="dvwa"
 
 log() { echo "[*] $*" >&2; }
 die() { echo "[!]" "$*" >&2; exit 1; }
@@ -119,8 +117,6 @@ main() {
     ADMIN_USERNAME="${ADMIN_USERNAME:-admin}"
     API_PORT="${API_PORT:-3001}"
     API_BASE="${API_BASE:-http://127.0.0.1:${API_PORT}/api}"
-    PROXY_CONTAINER="${PROXY_CONTAINER:-$PROXY_CONTAINER_DEFAULT}"
-    DVWA_CONTAINER="${DVWA_CONTAINER:-$DVWA_CONTAINER_DEFAULT}"
     log "Running bootstrap-nginx_love.sh for password update flow..."
     tmp_bootstrap="$(mktemp)"
     sed -e 's/\r$//' "$BOOTSTRAP_SCRIPT" > "$tmp_bootstrap"
@@ -129,8 +125,6 @@ main() {
     ADMIN_PASSWORD="${ADMIN_PASSWORD:-}" \
     NEW_ADMIN_PASSWORD="$new_admin_password" \
     API_BASE="$API_BASE" \
-    PROXY_CONTAINER="$PROXY_CONTAINER" \
-    DVWA_CONTAINER="$DVWA_CONTAINER" \
     bash "$tmp_bootstrap" || log "bootstrap-nginx_love.sh failed."
     rm -f "$tmp_bootstrap"
   else
