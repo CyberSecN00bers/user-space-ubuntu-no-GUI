@@ -124,6 +124,78 @@ curl_json() {
   printf '%s' "$out"
 }
 
+curl_auth_get() {
+  local url="$1"
+  local token="$2"
+  curl -sS -H "Authorization: Bearer $token" "$url"
+}
+
+disable_all_crs_rules() {
+  local token="$1"
+  log "Disabling all enabled CRS rules..."
+
+  local resp
+  resp="$(curl_auth_get "$API_BASE/modsec/crs/rules" "$token")" || {
+    log "Failed to fetch CRS rules"
+    return 1
+  }
+
+  echo "$resp" | jq . >/dev/null 2>&1 || {
+    log "CRS rules response is not valid JSON"
+    printf '%s\n' "$resp" >&2
+    return 1
+  }
+
+  local rule_files
+  rule_files="$(echo "$resp" | jq -r '.data[] | select(.enabled == true) | .ruleFile')"
+
+  if [[ -z "$rule_files" ]]; then
+    log "No enabled CRS rules found."
+    return 0
+  fi
+
+  while IFS= read -r rule_file; do
+    [[ -z "$rule_file" ]] && continue
+    log "Disabling CRS rule: $rule_file"
+    curl_json "PATCH" "$API_BASE/modsec/crs/rules/$rule_file/toggle" '{}' "$token" >/dev/null
+  done <<< "$rule_files"
+
+  log "All CRS rules disabled."
+}
+
+disable_all_custom_rules() {
+  local token="$1"
+  log "Disabling all enabled custom ModSecurity rules..."
+
+  local resp
+  resp="$(curl_auth_get "$API_BASE/modsec/rules" "$token")" || {
+    log "Failed to fetch custom rules"
+    return 1
+  }
+
+  echo "$resp" | jq . >/dev/null 2>&1 || {
+    log "Custom rules response is not valid JSON"
+    printf '%s\n' "$resp" >&2
+    return 1
+  }
+
+  local rule_ids
+  rule_ids="$(echo "$resp" | jq -r '.data[] | select(.enabled == true) | .id')"
+
+  if [[ -z "$rule_ids" ]]; then
+    log "No enabled custom rules found."
+    return 0
+  fi
+
+  while IFS= read -r rule_id; do
+    [[ -z "$rule_id" ]] && continue
+    log "Disabling custom rule: $rule_id"
+    curl_json "PATCH" "$API_BASE/modsec/rules/$rule_id/toggle" '{}' "$token" >/dev/null
+  done <<< "$rule_ids"
+
+  log "All custom rules disabled."
+}
+
 # ==============================
 # Payload builders
 # ==============================
@@ -134,7 +206,7 @@ build_domain_payload() {
   {
     name: $name,
     status: "active",
-    modsecEnabled: true,
+    modsecEnabled: false,
     upstreams: [
       {
         host: $host,
@@ -333,7 +405,11 @@ main() {
   token="$(login_with_fallback)"
   log "Access token acquired."
 
-  log "=== Step 2: Create dvwa.local ==="
+  log "=== Step 2: Disable all ModSecurity rules ==="
+  disable_all_crs_rules "$token"
+  disable_all_custom_rules "$token"
+
+  log "=== Step 3: Create dvwa.local ==="
   create_domain "$token" "$DOMAIN_DVWA_PAYLOAD"
 
   log "Bootstrap completed."
