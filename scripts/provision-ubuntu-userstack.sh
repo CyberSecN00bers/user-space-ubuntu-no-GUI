@@ -119,6 +119,10 @@ if [[ -f "$USERSTACK_DST/scripts/addweb.sh" ]]; then
   ln -sf "$USERSTACK_DST/scripts/addweb.sh" /usr/local/bin/addweb
   chmod +x /usr/local/bin/addweb || true
 fi
+if [[ -f "$USERSTACK_DST/scripts/nginx-love-setup.sh" ]]; then
+  ln -sf "$USERSTACK_DST/scripts/nginx-love-setup.sh" /usr/local/bin/nginx-love-setup
+  chmod +x /usr/local/bin/nginx-love-setup || true
+fi
 
 echo "[5.1/7] Configure Wazuh agent auto-enroll"
 WAZUH_CONF="/var/ossec/etc/ossec.conf"
@@ -183,18 +187,22 @@ if command -v systemctl >/dev/null 2>&1; then
     systemctl disable capstone-userstack-env.service >/dev/null 2>&1 || true
   fi
 
-  cat > /etc/systemd/system/capstone-userstack-refresh.service <<EOF
+  if systemctl list-unit-files capstone-userstack-refresh.service --no-legend 2>/dev/null | awk '{print $1}' | grep -qx capstone-userstack-refresh.service; then
+    systemctl disable capstone-userstack-refresh.service >/dev/null 2>&1 || true
+  fi
+
+  cat > /etc/systemd/system/capstone-userstack-up.service <<EOF
 [Unit]
-Description=Refresh capstone userstack docker compose on boot
+Description=Start capstone userstack docker compose on boot
 Wants=network-online.target docker.service
 After=network-online.target docker.service
-ConditionPathExists=${USERSTACK_DST}/scripts/refresh-capstone-userstack.sh
+ConditionPathExists=${USERSTACK_DST}/scripts/start-capstone-userstack.sh
 ConditionPathExists=${USERSTACK_DST}/docker-compose.yml
 
 [Service]
 Type=oneshot
 Environment=CAPSTONE_STACK_DIR=${USERSTACK_DST}
-ExecStart=${USERSTACK_DST}/scripts/refresh-capstone-userstack.sh
+ExecStart=${USERSTACK_DST}/scripts/start-capstone-userstack.sh
 TimeoutStartSec=0
 
 [Install]
@@ -202,13 +210,12 @@ WantedBy=multi-user.target
 EOF
 
   systemctl daemon-reload >/dev/null
-  systemctl enable capstone-userstack-refresh.service >/dev/null
+  systemctl enable capstone-userstack-up.service >/dev/null
 else
   echo "Skipping capstone userstack refresh service (systemd not available)"
 fi
 
-echo "[6/7] Start capstone userstack (docker compose)"
-bash "$USERSTACK_DST/scripts/install-capstone-userstack-service.sh"
+echo "[6/7] Skip starting capstone userstack (deferred to boot)"
 
 echo "[7/7] Optional: inject SSH public key"
 if [[ -n "${PACKER_SSH_PUBLIC_KEY:-}" && -d /home/ubuntu ]]; then
