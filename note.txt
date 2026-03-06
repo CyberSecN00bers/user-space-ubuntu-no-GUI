@@ -7,3 +7,5 @@ export PACKER_BRIDGE_LAN="nonet"
 export PACKER_SSH_PUBLIC_KEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIO1ut0z46xZh4zNQjVtm65bC7EvkBUQAFfGqswaXD53n root@red-client"
 
 export PACKER_SSH_PRIVATE_KEY=/root/.ssh/packer_id_ed25519
+
+variables.auto.pkrvars.hcl.example
