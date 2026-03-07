@@ -24,6 +24,25 @@ apt-get install -y --no-install-recommends \
   nmap sqlmap nikto \
   openssh-server qemu-guest-agent >/dev/null
 
+retry() {
+  local attempts="$1"
+  local delay="$2"
+  shift 2
+  local i=1
+
+  while true; do
+    if "$@"; then
+      return 0
+    fi
+    if (( i >= attempts )); then
+      return 1
+    fi
+    sleep "$delay"
+    i=$((i + 1))
+    delay=$((delay * 2))
+  done
+}
+
 echo "[2.1/7] Ensure ubuntu login password"
 if id ubuntu >/dev/null 2>&1; then
   echo "ubuntu:ubuntu" | chpasswd >/dev/null
@@ -208,12 +227,26 @@ WantedBy=multi-user.target
 EOF
 
   systemctl daemon-reload >/dev/null
-  systemctl enable capstone-userstack-up.service >/dev/null
+  # Do not enable by default; allow user to enable after clone
 else
   echo "Skipping capstone userstack refresh service (systemd not available)"
 fi
 
-echo "[6/7] Skip starting capstone userstack (deferred to boot)"
+echo "[6/7] Pre-pull capstone userstack images"
+if command -v docker >/dev/null 2>&1; then
+  if systemctl list-unit-files docker.service --no-legend 2>/dev/null | awk '{print $1}' | grep -qx docker.service; then
+    systemctl start docker.service >/dev/null 2>&1 || true
+  fi
+  COMPOSE_PULL_ATTEMPTS="${COMPOSE_PULL_ATTEMPTS:-3}"
+  COMPOSE_PULL_DELAY="${COMPOSE_PULL_DELAY:-10}"
+  cd "$USERSTACK_DST"
+  if ! retry "$COMPOSE_PULL_ATTEMPTS" "$COMPOSE_PULL_DELAY" docker compose pull; then
+    echo "Docker compose pull failed after ${COMPOSE_PULL_ATTEMPTS} attempts" >&2
+    exit 1
+  fi
+else
+  echo "Skipping docker compose pull (docker not installed)"
+fi
 
 echo "[7/7] Optional: inject SSH public key"
 if [[ -n "${PACKER_SSH_PUBLIC_KEY:-}" && -d /home/ubuntu ]]; then

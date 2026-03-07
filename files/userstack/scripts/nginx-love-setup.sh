@@ -222,6 +222,15 @@ main() {
   else
     log "Missing bootstrap script at ${BOOTSTRAP_SCRIPT}; skipping password update flow."
   fi
+
+  if command -v systemctl >/dev/null 2>&1; then
+    if systemctl list-unit-files capstone-userstack-up.service --no-legend 2>/dev/null | awk '{print $1}' | grep -qx capstone-userstack-up.service; then
+      systemctl enable capstone-userstack-up.service >/dev/null 2>&1 || true
+      log "Enabled capstone-userstack-up.service for auto-start on boot."
+    else
+      log "capstone-userstack-up.service not found; skipping enable."
+    fi
+  fi
 }
 
 main "$@"
