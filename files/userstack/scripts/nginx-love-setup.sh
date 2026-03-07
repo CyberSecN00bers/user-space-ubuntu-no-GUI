@@ -190,16 +190,24 @@ main() {
     tmp_bootstrap="$(mktemp)"
     sed -e 's/\r$//' "$BOOTSTRAP_SCRIPT" > "$tmp_bootstrap"
     chmod +x "$tmp_bootstrap"
-    if ADMIN_USERNAME="$ADMIN_USERNAME" \
-      ADMIN_PASSWORD="${ADMIN_PASSWORD:-}" \
-      NEW_ADMIN_PASSWORD="$new_admin_password" \
-      API_BASE="$API_BASE" \
-      bash "$tmp_bootstrap"; then
+
+    BOOTSTRAP_RETRY_ATTEMPTS="${BOOTSTRAP_RETRY_ATTEMPTS:-3}"
+    BOOTSTRAP_RETRY_DELAY="${BOOTSTRAP_RETRY_DELAY:-5}"
+
+    run_bootstrap() {
+      ADMIN_USERNAME="$ADMIN_USERNAME" \
+        ADMIN_PASSWORD="${ADMIN_PASSWORD:-}" \
+        NEW_ADMIN_PASSWORD="$new_admin_password" \
+        API_BASE="$API_BASE" \
+        bash "$tmp_bootstrap"
+    }
+
+    if retry "$BOOTSTRAP_RETRY_ATTEMPTS" "$BOOTSTRAP_RETRY_DELAY" run_bootstrap; then
       log "Password updated; syncing credentials in .env"
       upsert_line "ADMIN_PASSWORD" "ADMIN_PASSWORD=${new_admin_password}"
       upsert_line "NEW_ADMIN_PASSWORD" "NEW_ADMIN_PASSWORD=${new_admin_password}"
     else
-      log "bootstrap-nginx_love.sh failed."
+      log "bootstrap-nginx_love.sh failed after ${BOOTSTRAP_RETRY_ATTEMPTS} attempts."
     fi
     rm -f "$tmp_bootstrap"
   else
