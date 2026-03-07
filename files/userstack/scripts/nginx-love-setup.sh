@@ -148,19 +148,28 @@ main() {
   fi
   [[ -f "$ENV_FILE" ]] || die "Missing ${ENV_FILE}. Please create it from .env.example."
 
-  local cors_line vite_line pass_line
-  cors_line="CORS_ORIGIN=\"http://localhost:8080,http://localhost:5173,http://${public_host}:8080\""
-  vite_line="VITE_API_URL=http://${public_host}:3001/api"
-  pass_line="NEW_ADMIN_PASSWORD=${new_admin_password}"
-
-  upsert_line "CORS_ORIGIN" "$cors_line"
-  upsert_line "VITE_API_URL" "$vite_line"
-  upsert_line "NEW_ADMIN_PASSWORD" "$pass_line"
-
   load_env
   ADMIN_USERNAME="${ADMIN_USERNAME:-admin}"
   API_PORT="${API_PORT:-3001}"
   API_BASE="${API_BASE:-http://127.0.0.1:${API_PORT}/api}"
+
+  local current_admin_password current_new_password
+  current_admin_password="${ADMIN_PASSWORD:-}"
+  current_new_password="${NEW_ADMIN_PASSWORD:-}"
+
+  if [[ -z "$current_admin_password" && -z "$current_new_password" ]]; then
+    die "ADMIN_PASSWORD or NEW_ADMIN_PASSWORD is required in ${ENV_FILE}"
+  fi
+  if [[ -z "$current_admin_password" ]]; then
+    current_admin_password="$current_new_password"
+  fi
+
+  local cors_line vite_line
+  cors_line="CORS_ORIGIN=\"http://localhost:8080,http://localhost:5173,http://${public_host}:8080\""
+  vite_line="VITE_API_URL=http://${public_host}:3001/api"
+
+  upsert_line "CORS_ORIGIN" "$cors_line"
+  upsert_line "VITE_API_URL" "$vite_line"
 
   COMPOSE_RETRY_ATTEMPTS="${COMPOSE_RETRY_ATTEMPTS:-3}"
   COMPOSE_RETRY_DELAY="${COMPOSE_RETRY_DELAY:-10}"
@@ -196,7 +205,7 @@ main() {
 
     run_bootstrap() {
       ADMIN_USERNAME="$ADMIN_USERNAME" \
-        ADMIN_PASSWORD="${ADMIN_PASSWORD:-}" \
+        ADMIN_PASSWORD="$current_admin_password" \
         NEW_ADMIN_PASSWORD="$new_admin_password" \
         API_BASE="$API_BASE" \
         bash "$tmp_bootstrap"
