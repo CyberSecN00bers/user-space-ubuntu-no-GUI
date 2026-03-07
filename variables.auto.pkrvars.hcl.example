@@ -10,5 +10,5 @@ memory             = 6144
 ballooning_minimum = 0
 disk_size          = "30G"
 
-lan_vlan_tag = 99
+lan_vlan_tag = 10
 task_timeout = "2h"
