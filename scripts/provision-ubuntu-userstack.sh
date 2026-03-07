@@ -223,6 +223,11 @@ if [[ -n "${PACKER_SSH_PUBLIC_KEY:-}" && -d /home/ubuntu ]]; then
   chmod 0600 /home/ubuntu/.ssh/authorized_keys
 fi
 
+echo "[7.1/7] Reset machine-id for cloning"
+truncate -s 0 /etc/machine-id
+rm -f /var/lib/dbus/machine-id
+ln -sf /etc/machine-id /var/lib/dbus/machine-id
+
 echo "[DONE] Cleanup"
 rm -rf /tmp/capstone-userstack /tmp/scripts || true
 apt-get autoremove -y >/dev/null 2>&1 || true
