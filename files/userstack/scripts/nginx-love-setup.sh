@@ -165,8 +165,8 @@ main() {
   fi
 
   local cors_line vite_line
-  cors_line="CORS_ORIGIN=\"http://localhost:8080,http://localhost:5173,http://${public_host}:8080\""
-  vite_line="VITE_API_URL=http://${public_host}:3001/api"
+  cors_line="CORS_ORIGIN=\"http://localhost:8080,http://localhost:5173,http://${public_host}\""
+  vite_line="VITE_API_URL=http://${public_host}/api"
 
   upsert_line "CORS_ORIGIN" "$cors_line"
   upsert_line "VITE_API_URL" "$vite_line"
