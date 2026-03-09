@@ -111,6 +111,22 @@ if ! dpkg -s wazuh-agent >/dev/null 2>&1; then
   apt-get install -y wazuh-agent >/dev/null
 fi
 
+echo "[4.1/7] Install goreplay"
+GOREPLAY_VERSION="${GOREPLAY_VERSION:-1.3.3}"
+GOREPLAY_TARBALL="/tmp/goreplay-${GOREPLAY_VERSION}.tar.gz"
+GOREPLAY_SRC_DIR="/tmp/goreplay-${GOREPLAY_VERSION}"
+apt-get update -y >/dev/null
+apt-get install -y --no-install-recommends build-essential golang-go libpcap-dev >/dev/null
+rm -rf "$GOREPLAY_SRC_DIR" "$GOREPLAY_TARBALL"
+curl -fL -o "$GOREPLAY_TARBALL" "https://github.com/buger/goreplay/archive/refs/tags/${GOREPLAY_VERSION}.tar.gz"
+tar -xzf "$GOREPLAY_TARBALL" -C /tmp
+pushd "$GOREPLAY_SRC_DIR" >/dev/null
+go build -o gor
+install -d -m 0755 /usr/local/bin
+install -m 0755 gor /usr/local/bin/gor
+popd >/dev/null
+rm -rf "$GOREPLAY_SRC_DIR" "$GOREPLAY_TARBALL"
+
 echo "[5/7] Install capstone userstack files"
 if [[ ! -d "$USERSTACK_SRC" ]]; then
   echo "Missing $USERSTACK_SRC" >&2
@@ -139,6 +155,11 @@ fi
 if [[ -f "$USERSTACK_DST/scripts/nginx-love-setup.sh" ]]; then
   ln -sf "$USERSTACK_DST/scripts/nginx-love-setup.sh" /usr/local/bin/nginx-love-setup
   chmod +x /usr/local/bin/nginx-love-setup || true
+fi
+if [[ -f "$USERSTACK_DST/scripts/gor-mirror-ports.sh" ]]; then
+  ln -sf "$USERSTACK_DST/scripts/gor-mirror-ports.sh" /usr/local/bin/gor-mirror-ports
+  ln -sf "$USERSTACK_DST/scripts/gor-mirror-ports.sh" /usr/local/bin/addport
+  chmod +x /usr/local/bin/gor-mirror-ports /usr/local/bin/addport || true
 fi
 
 echo "[5.1/7] Configure Wazuh agent auto-enroll"

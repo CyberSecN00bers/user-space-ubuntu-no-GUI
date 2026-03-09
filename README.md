@@ -7,6 +7,7 @@ This repo builds a VM template that ships a pre-pulled nginx-love stack and a sm
 - Helper scripts:
   - `nginx-love-setup` (configure domain + admin password, then start stack).
   - `addweb` (create a new domain upstream via API).
+  - `addport` / `gor-mirror-ports` (start or update GoReplay port mirroring to `http://127.0.0.1:60085`).
   - `start-capstone-userstack.sh` (start compose on boot when service is enabled).
 
 DVWA has been removed from the stack.
@@ -78,6 +79,29 @@ Notes:
 - `addweb` reads `ADMIN_PASSWORD` / `NEW_ADMIN_PASSWORD` from `/opt/capstone-userstack/.env`.
 - Run `sudo nginx-love-setup` first to ensure credentials are valid.
 
+## addport / gor-mirror-ports (GoReplay helper)
+
+Usage:
+```bash
+sudo addport 8080 3001
+```
+
+This merges the provided ports into the saved list, restarts `gor` in the background, and forwards captured HTTP traffic to `http://127.0.0.1:60085`.
+
+Other commands:
+```bash
+sudo addport 8081
+sudo addport start 80 8080 3000
+sudo addport remove 3001
+sudo addport status
+sudo addport stop
+```
+
+Notes:
+- Default capture scope is loopback only: `GOR_LISTEN_HOST=127.0.0.1` on interface `lo`.
+- Override `GOR_TARGET_URL`, `GOR_LISTEN_HOST`, or `GOR_RAW_INTERFACE` if you need a different replay target or capture scope.
+- The helper only forwards traffic. Nothing in the current stack needs to listen on port `60085` yet.
+
 ## Auto-start on Boot
 
 The build creates a systemd unit:
@@ -85,4 +109,3 @@ The build creates a systemd unit:
 
 This unit runs:
 - `/opt/capstone-userstack/scripts/start-capstone-userstack.sh` → `docker compose up -d`
-
