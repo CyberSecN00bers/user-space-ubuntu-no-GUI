@@ -1,16 +1,17 @@
 # Capstone Userstack (nginx-love)
 
 This repo builds a VM template that ships a pre-pulled nginx-love stack and a small set of helper scripts to configure it on first boot.
-It also stages the in-progress BlueAgent compose bundle under `/opt/capstone-blueteam-agent` and pre-pulls its images, but does not auto-start it.
+It also clones the BlueAgent repository into `/opt/capstone-blueteam-agent`, pre-pulls its images, and leaves it ready for later `git pull` updates.
 
 **What is included**
 - Docker Compose stack at `/opt/capstone-userstack` (backend, frontend, postgres).
-- BlueAgent AI stack staged separately at `/opt/capstone-blueteam-agent`.
+- BlueAgent AI stack cloned separately at `/opt/capstone-blueteam-agent`.
 - Helper scripts:
   - `nginx-love-setup` (configure domain + admin password, then start stack).
   - `addweb` (create a new domain upstream via API).
   - `addport` / `gor-mirror-ports` (start or update GoReplay port mirroring to `http://127.0.0.1:60085`).
   - `start-capstone-userstack.sh` (start compose on boot when service is enabled).
+  - `refresh-blueteam-agent` (pull latest BlueAgent repo changes and refresh containers).
 
 DVWA has been removed from the stack.
 
@@ -117,10 +118,16 @@ This unit runs:
 
 ## BlueAgent Bundle
 
-The template also places the AI bundle here:
+The template clones the AI repo here:
 - `/opt/capstone-blueteam-agent`
 
 Notes:
-- The directory includes `docker-compose.yaml` and `.env.example` copied to `.env` on build.
+- The build clones `https://github.com/CyberSecN00bers/Blueteam-Agent-Minimal.git` (branch `main` by default).
+- If `.env.example` exists and `.env` is missing, the build copies `.env.example` to `.env`.
 - Images are pre-pulled during provisioning with `docker compose pull`.
 - The stack is intentionally not enabled or started by default yet.
+
+To refresh later without rebuilding the template:
+```bash
+sudo refresh-blueteam-agent
+```
