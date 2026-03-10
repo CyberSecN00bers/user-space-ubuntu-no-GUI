@@ -21,6 +21,15 @@ build {
   }
 
   provisioner "shell" {
+    inline = ["mkdir -p /tmp/capstone-blueteam-agent"]
+  }
+
+  provisioner "file" {
+    source      = "files/blueteam-agent/"
+    destination = "/tmp/capstone-blueteam-agent"
+  }
+
+  provisioner "shell" {
     inline = ["mkdir -p /tmp/scripts"]
   }
 

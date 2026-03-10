@@ -1,9 +1,11 @@
 # Capstone Userstack (nginx-love)
 
 This repo builds a VM template that ships a pre-pulled nginx-love stack and a small set of helper scripts to configure it on first boot.
+It also stages the in-progress BlueAgent compose bundle under `/opt/capstone-blueteam-agent` and pre-pulls its images, but does not auto-start it.
 
 **What is included**
 - Docker Compose stack at `/opt/capstone-userstack` (backend, frontend, postgres).
+- BlueAgent AI stack staged separately at `/opt/capstone-blueteam-agent`.
 - Helper scripts:
   - `nginx-love-setup` (configure domain + admin password, then start stack).
   - `addweb` (create a new domain upstream via API).
@@ -41,6 +43,7 @@ The script runs in this order:
 - Enables `capstone-userstack-up.service` so the stack auto-starts on reboot.
 
 ### Tuning timeouts/retries
+
 You can override these if the VM is slow:
 - `COMPOSE_RETRY_ATTEMPTS` (default `3`)
 - `COMPOSE_RETRY_DELAY` (default `10`)
@@ -70,6 +73,7 @@ Usage:
 ```bash
 addweb <domain> <port>
 ```
+
 Or:
 ```bash
 addweb <domain>:<port>
@@ -109,4 +113,14 @@ The build creates a systemd unit:
 - `capstone-userstack-up.service`
 
 This unit runs:
-- `/opt/capstone-userstack/scripts/start-capstone-userstack.sh` → `docker compose up -d`
+- `/opt/capstone-userstack/scripts/start-capstone-userstack.sh` -> `docker compose up -d`
+
+## BlueAgent Bundle
+
+The template also places the AI bundle here:
+- `/opt/capstone-blueteam-agent`
+
+Notes:
+- The directory includes `docker-compose.yaml` and `.env.example` copied to `.env` on build.
+- Images are pre-pulled during provisioning with `docker compose pull`.
+- The stack is intentionally not enabled or started by default yet.
