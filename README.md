@@ -98,7 +98,8 @@ sudo addport stop
 ```
 
 Notes:
-- Default capture scope is loopback only: `GOR_LISTEN_HOST=127.0.0.1` on interface `lo`.
+- Default capture scope is loopback only: `GOR_LISTEN_HOST=localhost`.
+- To capture traffic from a real NIC instead, use `GOR_LISTEN_HOST=` with `GOR_RAW_INTERFACE=<iface>`, for example `sudo GOR_LISTEN_HOST= GOR_RAW_INTERFACE=eth0 addport 80 8080`.
 - Override `GOR_TARGET_URL`, `GOR_LISTEN_HOST`, or `GOR_RAW_INTERFACE` if you need a different replay target or capture scope.
 - The helper only forwards traffic. Nothing in the current stack needs to listen on port `60085` yet.
 
