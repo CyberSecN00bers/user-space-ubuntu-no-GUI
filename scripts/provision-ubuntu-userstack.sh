@@ -5,26 +5,47 @@ set -euo pipefail
 
 USERSTACK_SRC="/tmp/capstone-userstack"
 USERSTACK_DST="/opt/capstone-userstack"
+BLUETEAM_AGENT_SRC="/tmp/capstone-blueteam-agent"
+BLUETEAM_AGENT_DST="/opt/capstone-blueteam-agent"
 export DEBIAN_FRONTEND=noninteractive
 
-echo "[1/7] Update apt cache"
+echo "[1/8] Update apt cache"
 apt-get update -y >/dev/null
 
-echo "[1.1/7] Ensure Universe repository"
+echo "[1.1/8] Ensure Universe repository"
 apt-get install -y --no-install-recommends software-properties-common >/dev/null
 if command -v add-apt-repository >/dev/null 2>&1; then
   add-apt-repository -y universe >/dev/null 2>&1 || true
   apt-get update -y >/dev/null
 fi
 
-echo "[2/7] Install base packages"
+echo "[2/8] Install base packages"
 apt-get install -y --no-install-recommends \
   ca-certificates curl gnupg jq unzip npm \
   cloud-init git \
   nmap sqlmap nikto \
   openssh-server qemu-guest-agent >/dev/null
 
-echo "[2.1/7] Ensure ubuntu login password"
+retry() {
+  local attempts="$1"
+  local delay="$2"
+  shift 2
+  local i=1
+
+  while true; do
+    if "$@"; then
+      return 0
+    fi
+    if (( i >= attempts )); then
+      return 1
+    fi
+    sleep "$delay"
+    i=$((i + 1))
+    delay=$((delay * 2))
+  done
+}
+
+echo "[2.1/8] Ensure ubuntu login password"
 if id ubuntu >/dev/null 2>&1; then
   echo "ubuntu:ubuntu" | chpasswd >/dev/null
   passwd -u ubuntu >/dev/null 2>&1 || true
@@ -35,7 +56,7 @@ else
   echo "Skipping password reset (user ubuntu not found)"
 fi
 
-echo "[2.2/7] Ensure researcher user (restricted)"
+echo "[2.2/8] Ensure researcher user (restricted)"
 RESEARCHER_USER="researcher"
 RESEARCHER_PASSWORD="${RESEARCHER_PASSWORD:-researcher}"
 if ! id "${RESEARCHER_USER}" >/dev/null 2>&1; then
@@ -50,7 +71,7 @@ if getent group docker >/dev/null 2>&1; then
   gpasswd -d "${RESEARCHER_USER}" docker >/dev/null 2>&1 || true
 fi
 
-echo "[3/7] Install Docker CE"
+echo "[3/8] Install Docker CE"
 # Docker CE (official)
 DOCKER_CODENAME="$(. /etc/os-release && echo "${VERSION_CODENAME}")"
 DOCKER_DISTRO="ubuntu"
@@ -83,7 +104,7 @@ else
   echo "Skipping docker enable (docker not installed)"
 fi
 
-echo "[4/7] Install Wazuh agent"
+echo "[4/8] Install Wazuh agent"
 WAZUH_AGENT_REPO_VERSION="${WAZUH_AGENT_REPO_VERSION:-4.x}"
 if ! dpkg -s wazuh-agent >/dev/null 2>&1; then
   curl -fsSL https://packages.wazuh.com/key/GPG-KEY-WAZUH | gpg --dearmor -o /usr/share/keyrings/wazuh.gpg
@@ -92,7 +113,23 @@ if ! dpkg -s wazuh-agent >/dev/null 2>&1; then
   apt-get install -y wazuh-agent >/dev/null
 fi
 
-echo "[5/7] Install capstone userstack files"
+echo "[4.1/8] Install goreplay"
+GOREPLAY_VERSION="${GOREPLAY_VERSION:-1.3.3}"
+GOREPLAY_TARBALL="/tmp/goreplay-${GOREPLAY_VERSION}.tar.gz"
+GOREPLAY_SRC_DIR="/tmp/goreplay-${GOREPLAY_VERSION}"
+apt-get update -y >/dev/null
+apt-get install -y --no-install-recommends build-essential golang-go libpcap-dev >/dev/null
+rm -rf "$GOREPLAY_SRC_DIR" "$GOREPLAY_TARBALL"
+curl -fL -o "$GOREPLAY_TARBALL" "https://github.com/buger/goreplay/archive/refs/tags/${GOREPLAY_VERSION}.tar.gz"
+tar -xzf "$GOREPLAY_TARBALL" -C /tmp
+pushd "$GOREPLAY_SRC_DIR" >/dev/null
+go build -o gor
+install -d -m 0755 /usr/local/bin
+install -m 0755 gor /usr/local/bin/gor
+popd >/dev/null
+rm -rf "$GOREPLAY_SRC_DIR" "$GOREPLAY_TARBALL"
+
+echo "[5/8] Install capstone userstack files"
 if [[ ! -d "$USERSTACK_SRC" ]]; then
   echo "Missing $USERSTACK_SRC" >&2
   exit 1
@@ -104,8 +141,6 @@ cp -a "$USERSTACK_SRC"/. "$USERSTACK_DST"/
 mkdir -p \
   "$USERSTACK_DST/logs/nginx" \
   "$USERSTACK_DST/logs/modsecurity" \
-  "$USERSTACK_DST/logs/apache" \
-  "$USERSTACK_DST/logs/mysql" \
   "$USERSTACK_DST/logs/postgres"
 
 if [[ -f "$USERSTACK_DST/.env.example" && ! -f "$USERSTACK_DST/.env" ]]; then
@@ -123,8 +158,30 @@ if [[ -f "$USERSTACK_DST/scripts/nginx-love-setup.sh" ]]; then
   ln -sf "$USERSTACK_DST/scripts/nginx-love-setup.sh" /usr/local/bin/nginx-love-setup
   chmod +x /usr/local/bin/nginx-love-setup || true
 fi
+if [[ -f "$USERSTACK_DST/scripts/gor-mirror-ports.sh" ]]; then
+  ln -sf "$USERSTACK_DST/scripts/gor-mirror-ports.sh" /usr/local/bin/gor-mirror-ports
+  ln -sf "$USERSTACK_DST/scripts/gor-mirror-ports.sh" /usr/local/bin/addport
+  chmod +x /usr/local/bin/gor-mirror-ports /usr/local/bin/addport || true
+fi
 
-echo "[5.1/7] Configure Wazuh agent auto-enroll"
+echo "[5.1/8] Install blueteam agent files"
+if [[ ! -d "$BLUETEAM_AGENT_SRC" ]]; then
+  echo "Missing $BLUETEAM_AGENT_SRC" >&2
+  exit 1
+fi
+rm -rf "$BLUETEAM_AGENT_DST"
+mkdir -p "$BLUETEAM_AGENT_DST"
+cp -a "$BLUETEAM_AGENT_SRC"/. "$BLUETEAM_AGENT_DST"/
+
+mkdir -p \
+  "$BLUETEAM_AGENT_DST/data" \
+  "$BLUETEAM_AGENT_DST/logs"
+
+if [[ -f "$BLUETEAM_AGENT_DST/.env.example" && ! -f "$BLUETEAM_AGENT_DST/.env" ]]; then
+  cp "$BLUETEAM_AGENT_DST/.env.example" "$BLUETEAM_AGENT_DST/.env"
+fi
+
+echo "[5.2/8] Configure Wazuh agent auto-enroll"
 WAZUH_CONF="/var/ossec/etc/ossec.conf"
 USERSTACK_WAZUH_CONF="${USERSTACK_DST}/config/ossec.conf"
 if [[ -f "$USERSTACK_WAZUH_CONF" ]]; then
@@ -210,14 +267,35 @@ WantedBy=multi-user.target
 EOF
 
   systemctl daemon-reload >/dev/null
-  systemctl enable capstone-userstack-up.service >/dev/null
+  # Do not enable by default; allow user to enable after clone
 else
   echo "Skipping capstone userstack refresh service (systemd not available)"
 fi
 
-echo "[6/7] Skip starting capstone userstack (deferred to boot)"
+echo "[6/8] Pre-pull capstone userstack images"
+if command -v docker >/dev/null 2>&1; then
+  if systemctl list-unit-files docker.service --no-legend 2>/dev/null | awk '{print $1}' | grep -qx docker.service; then
+    systemctl start docker.service >/dev/null 2>&1 || true
+  fi
+  COMPOSE_PULL_ATTEMPTS="${COMPOSE_PULL_ATTEMPTS:-3}"
+  COMPOSE_PULL_DELAY="${COMPOSE_PULL_DELAY:-10}"
+  cd "$USERSTACK_DST"
+  if ! retry "$COMPOSE_PULL_ATTEMPTS" "$COMPOSE_PULL_DELAY" docker compose pull; then
+    echo "Docker compose pull failed after ${COMPOSE_PULL_ATTEMPTS} attempts" >&2
+    exit 1
+  fi
 
-echo "[7/7] Optional: inject SSH public key"
+  echo "[6.1/8] Pre-pull blueteam agent images"
+  cd "$BLUETEAM_AGENT_DST"
+  if ! retry "$COMPOSE_PULL_ATTEMPTS" "$COMPOSE_PULL_DELAY" docker compose pull; then
+    echo "Blueteam agent docker compose pull failed after ${COMPOSE_PULL_ATTEMPTS} attempts" >&2
+    exit 1
+  fi
+else
+  echo "Skipping docker compose pull (docker not installed)"
+fi
+
+echo "[7/8] Optional: inject SSH public key"
 if [[ -n "${PACKER_SSH_PUBLIC_KEY:-}" && -d /home/ubuntu ]]; then
   install -d -m 0700 -o ubuntu -g ubuntu /home/ubuntu/.ssh
   echo "$PACKER_SSH_PUBLIC_KEY" > /home/ubuntu/.ssh/authorized_keys
@@ -225,8 +303,13 @@ if [[ -n "${PACKER_SSH_PUBLIC_KEY:-}" && -d /home/ubuntu ]]; then
   chmod 0600 /home/ubuntu/.ssh/authorized_keys
 fi
 
+echo "[8/8] Reset machine-id for cloning"
+truncate -s 0 /etc/machine-id
+rm -f /var/lib/dbus/machine-id
+ln -sf /etc/machine-id /var/lib/dbus/machine-id
+
 echo "[DONE] Cleanup"
-rm -rf /tmp/capstone-userstack /tmp/scripts || true
+rm -rf /tmp/capstone-userstack /tmp/capstone-blueteam-agent /tmp/scripts || true
 apt-get autoremove -y >/dev/null 2>&1 || true
 apt-get clean >/dev/null 2>&1
 rm -rf /var/lib/apt/lists/* || true

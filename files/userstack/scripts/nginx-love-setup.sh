@@ -5,8 +5,6 @@ STACK_DIR="${CAPSTONE_STACK_DIR:-/opt/capstone-userstack}"
 ENV_FILE="${STACK_DIR}/.env"
 ENV_EXAMPLE="${STACK_DIR}/.env.example"
 BOOTSTRAP_SCRIPT="${STACK_DIR}/scripts/bootstrap-nginx_love.sh"
-PROXY_CONTAINER_DEFAULT="nginx-love-backend"
-DVWA_CONTAINER_DEFAULT="dvwa"
 
 log() { echo "[*] $*" >&2; }
 die() { echo "[!]" "$*" >&2; exit 1; }
@@ -66,6 +64,59 @@ upsert_line() {
   fi
 }
 
+retry() {
+  local attempts="$1"
+  local delay="$2"
+  shift 2
+  local i=1
+
+  while true; do
+    if "$@"; then
+      return 0
+    fi
+    if (( i >= attempts )); then
+      return 1
+    fi
+    sleep "$delay"
+    i=$((i + 1))
+    delay=$((delay * 2))
+  done
+}
+
+wait_for_docker() {
+  local timeout="${1:-60}"
+  local start now
+  start="$(date +%s)"
+  while true; do
+    if docker info >/dev/null 2>&1; then
+      return 0
+    fi
+    now="$(date +%s)"
+    if (( now - start >= timeout )); then
+      return 1
+    fi
+    sleep 2
+  done
+}
+
+wait_for_api() {
+  local url="$1"
+  local timeout="${2:-180}"
+  local interval="${3:-3}"
+  local start now
+  start="$(date +%s)"
+  while true; do
+    if curl -fsS "$url" >/dev/null 2>&1; then
+      return 0
+    fi
+    now="$(date +%s)"
+    if (( now - start >= timeout )); then
+      return 1
+    fi
+    sleep "$interval"
+  done
+}
+
 main() {
   if [[ "${EUID}" -ne 0 ]]; then
     die "This script must be run as root"
@@ -97,44 +148,88 @@ main() {
   fi
   [[ -f "$ENV_FILE" ]] || die "Missing ${ENV_FILE}. Please create it from .env.example."
 
-  local cors_line vite_line pass_line
-  cors_line="CORS_ORIGIN=\"http://localhost:8080,http://localhost:5173,http://${public_host}:8080\""
-  vite_line="VITE_API_URL=http://${public_host}:3001/api"
-  pass_line="NEW_ADMIN_PASSWORD=${new_admin_password}"
+  load_env
+  ADMIN_USERNAME="${ADMIN_USERNAME:-admin}"
+  API_PORT="${API_PORT:-3001}"
+  API_BASE="${API_BASE:-http://127.0.0.1:${API_PORT}/api}"
+
+  local current_admin_password current_new_password
+  current_admin_password="${ADMIN_PASSWORD:-}"
+  current_new_password="${NEW_ADMIN_PASSWORD:-}"
+
+  if [[ -z "$current_admin_password" && -z "$current_new_password" ]]; then
+    die "ADMIN_PASSWORD or NEW_ADMIN_PASSWORD is required in ${ENV_FILE}"
+  fi
+  if [[ -z "$current_admin_password" ]]; then
+    current_admin_password="$current_new_password"
+  fi
+
+  local cors_line vite_line
+  cors_line="CORS_ORIGIN=\"http://localhost:8080,http://localhost:5173,http://${public_host}\""
+  vite_line="VITE_API_URL=http://${public_host}/api"
 
   upsert_line "CORS_ORIGIN" "$cors_line"
   upsert_line "VITE_API_URL" "$vite_line"
-  upsert_line "NEW_ADMIN_PASSWORD" "$pass_line"
+
+  COMPOSE_RETRY_ATTEMPTS="${COMPOSE_RETRY_ATTEMPTS:-3}"
+  COMPOSE_RETRY_DELAY="${COMPOSE_RETRY_DELAY:-10}"
+  DOCKER_WAIT_TIMEOUT="${DOCKER_WAIT_TIMEOUT:-60}"
+  API_WAIT_TIMEOUT="${API_WAIT_TIMEOUT:-180}"
+  API_WAIT_INTERVAL="${API_WAIT_INTERVAL:-3}"
 
   if command -v docker >/dev/null 2>&1; then
+    if ! wait_for_docker "$DOCKER_WAIT_TIMEOUT"; then
+      die "Docker daemon not ready after ${DOCKER_WAIT_TIMEOUT}s"
+    fi
     cd "$STACK_DIR"
-    log "Restarting docker compose (with build) to apply .env changes..."
-    docker compose up -d --build >/dev/null 2>&1 || log "docker compose up failed."
+    log "Starting docker compose (with build) to apply .env changes..."
+    if ! retry "$COMPOSE_RETRY_ATTEMPTS" "$COMPOSE_RETRY_DELAY" docker compose up -d --build; then
+      die "docker compose up failed after ${COMPOSE_RETRY_ATTEMPTS} attempts"
+    fi
+    log "Waiting for API health: ${API_BASE}/health"
+    if ! wait_for_api "${API_BASE}/health" "$API_WAIT_TIMEOUT" "$API_WAIT_INTERVAL"; then
+      die "API not ready after ${API_WAIT_TIMEOUT}s"
+    fi
   else
-    log "Docker not installed; skipping compose restart."
+    die "Docker not installed; cannot proceed."
   fi
 
   if [[ -x "$BOOTSTRAP_SCRIPT" ]]; then
-    load_env
-    ADMIN_USERNAME="${ADMIN_USERNAME:-admin}"
-    API_PORT="${API_PORT:-3001}"
-    API_BASE="${API_BASE:-http://127.0.0.1:${API_PORT}/api}"
-    PROXY_CONTAINER="${PROXY_CONTAINER:-$PROXY_CONTAINER_DEFAULT}"
-    DVWA_CONTAINER="${DVWA_CONTAINER:-$DVWA_CONTAINER_DEFAULT}"
     log "Running bootstrap-nginx_love.sh for password update flow..."
     tmp_bootstrap="$(mktemp)"
     sed -e 's/\r$//' "$BOOTSTRAP_SCRIPT" > "$tmp_bootstrap"
     chmod +x "$tmp_bootstrap"
-    ADMIN_USERNAME="$ADMIN_USERNAME" \
-    ADMIN_PASSWORD="${ADMIN_PASSWORD:-}" \
-    NEW_ADMIN_PASSWORD="$new_admin_password" \
-    API_BASE="$API_BASE" \
-    PROXY_CONTAINER="$PROXY_CONTAINER" \
-    DVWA_CONTAINER="$DVWA_CONTAINER" \
-    bash "$tmp_bootstrap" || log "bootstrap-nginx_love.sh failed."
+
+    BOOTSTRAP_RETRY_ATTEMPTS="${BOOTSTRAP_RETRY_ATTEMPTS:-3}"
+    BOOTSTRAP_RETRY_DELAY="${BOOTSTRAP_RETRY_DELAY:-5}"
+
+    run_bootstrap() {
+      ADMIN_USERNAME="$ADMIN_USERNAME" \
+        ADMIN_PASSWORD="$current_admin_password" \
+        NEW_ADMIN_PASSWORD="$new_admin_password" \
+        API_BASE="$API_BASE" \
+        bash "$tmp_bootstrap"
+    }
+
+    if retry "$BOOTSTRAP_RETRY_ATTEMPTS" "$BOOTSTRAP_RETRY_DELAY" run_bootstrap; then
+      log "Password updated; syncing credentials in .env"
+      upsert_line "ADMIN_PASSWORD" "ADMIN_PASSWORD=${new_admin_password}"
+      upsert_line "NEW_ADMIN_PASSWORD" "NEW_ADMIN_PASSWORD=${new_admin_password}"
+    else
+      log "bootstrap-nginx_love.sh failed after ${BOOTSTRAP_RETRY_ATTEMPTS} attempts."
+    fi
     rm -f "$tmp_bootstrap"
   else
     log "Missing bootstrap script at ${BOOTSTRAP_SCRIPT}; skipping password update flow."
+  fi
+
+  if command -v systemctl >/dev/null 2>&1; then
+    if systemctl list-unit-files capstone-userstack-up.service --no-legend 2>/dev/null | awk '{print $1}' | grep -qx capstone-userstack-up.service; then
+      systemctl enable capstone-userstack-up.service >/dev/null 2>&1 || true
+      log "Enabled capstone-userstack-up.service for auto-start on boot."
+    else
+      log "capstone-userstack-up.service not found; skipping enable."
+    fi
   fi
 }
 

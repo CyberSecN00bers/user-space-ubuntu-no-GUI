@@ -116,89 +116,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
-  # Bootstrap helper container: waits for Postgres + API health, then runs bootstrap-nginx_love.sh once
-  # (state stored in nginx_love_bootstrap_state so it won't rerun on restart; container removes itself afterwards)
-  nginx-love-bootstrap:
-    image: docker:27-cli
-    container_name: nginx-love-bootstrap
-    restart: on-failure:20
-    networks:
-      - capstone-dmz-network
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ./scripts/bootstrap-nginx_love.sh:/bootstrap-nginx_love.sh:ro
-      - nginx_love_bootstrap_state:/state
-    environment:
-      API_BASE: "http://nginx-love-backend:3001/api"
-      ADMIN_USERNAME: admin
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
-      NEW_ADMIN_PASSWORD: ${NEW_ADMIN_PASSWORD}
-      TOTP_CODE: "${TOTP_CODE:-}"
-      PROXY_CONTAINER: "nginx-love-backend"
-      DVWA_CONTAINER: "dvwa"
-      AUTO_CONNECT_NETWORK: "true"
-    depends_on:
-      postgres-nginx-love:
-        condition: service_healthy
-      backend:
-        condition: service_healthy
-      dvwa:
-        condition: service_started
-    entrypoint: ["/bin/sh"]
-    command:
-      - -c
-      - |
-          set -eu
-          SELF_NAME="nginx-love-bootstrap"
-          STATE_FILE="/state/.nginx_love_bootstrapped"
-
-          # If already bootstrapped, stay idle (so the container remains Up)
-          if [ -f "$$STATE_FILE" ]; then
-            echo "[bootstrap] already bootstrapped -> removing self"
-            docker rm -f "$$SELF_NAME" >/dev/null 2>&1 || true
-            exit 0
-          fi
-
-          apk add --no-cache bash curl jq >/dev/null
-
-          # Wait until Postgres is truly "healthy" (prevents backend 500 errors when Prisma is not connected yet)
-          echo "[bootstrap] waiting postgres healthy..."
-          while [ "$(docker inspect -f '{{.State.Health.Status}}' nginx-love-postgres 2>/dev/null || echo starting)" != "healthy" ]; do
-            sleep 2
-          done
-
-          # Wait for API health endpoint
-          echo "[bootstrap] waiting for API health: $$API_BASE/health"
-          while ! curl -fsS "$$API_BASE/health" >/dev/null 2>&1; do
-            sleep 2
-          done
-
-
-          # Windows or CRLF -> strip \r
-          cp /bootstrap-nginx_love.sh /tmp/bootstrap-nginx-love.sh
-          sed -i 's/\r$//' /tmp/bootstrap-nginx-love.sh
-
-          echo "[bootstrap] running bootstrap once..."
-          bash /tmp/bootstrap-nginx-love.sh
-
-          touch "$$STATE_FILE"
-          echo "[bootstrap] done -> removing self"
-          docker rm -f "$$SELF_NAME" >/dev/null 2>&1 || true
-          exit 0
-  dvwa:
-    image: vulnerables/web-dvwa
-    container_name: dvwa
-    restart: unless-stopped
-    environment:
-      - TZ=${TZ:-Asia/Ho_Chi_Minh}
-    volumes:
-      - ./config/mysql-logging.cnf:/mysql-logging.cnf:ro
-      - ./logs/mysql:/var/log/mysql
-      - ./logs/apache:/var/log/apache2
-      - ./fim/dvwa_upload:/var/www/html/hackable/uploads
-    networks:
-      - capstone-dmz-network
-
 volumes:
   postgres_nginx_love_data:
     driver: local
@@ -210,8 +127,5 @@ volumes:
     driver: local
   nginx_modules:
     driver: local  
-  nginx_love_bootstrap_state:
-    driver: local
-
 networks:
   capstone-dmz-network: {}
