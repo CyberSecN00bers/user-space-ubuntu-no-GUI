@@ -28,7 +28,7 @@ services:
     image: vouu/nginx-waf-backend:ubuntu2404
     restart: unless-stopped
     container_name: nginx-love-backend
-    # network_mode: host
+    network_mode: host
     hostname: backend
     ports:
       - "${API_PORT:-3001}:3001"
