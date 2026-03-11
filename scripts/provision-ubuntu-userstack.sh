@@ -5,8 +5,9 @@ set -euo pipefail
 
 USERSTACK_SRC="/tmp/capstone-userstack"
 USERSTACK_DST="/opt/capstone-userstack"
-BLUETEAM_AGENT_SRC="/tmp/capstone-blueteam-agent"
 BLUETEAM_AGENT_DST="/opt/capstone-blueteam-agent"
+BLUETEAM_AGENT_REPO_URL="${BLUETEAM_AGENT_REPO_URL:-https://github.com/CyberSecN00bers/Blueteam-Agent-Minimal.git}"
+BLUETEAM_AGENT_REPO_REF="${BLUETEAM_AGENT_REPO_REF:-main}"
 export DEBIAN_FRONTEND=noninteractive
 
 echo "[1/8] Update apt cache"
@@ -163,15 +164,20 @@ if [[ -f "$USERSTACK_DST/scripts/gor-mirror-ports.sh" ]]; then
   ln -sf "$USERSTACK_DST/scripts/gor-mirror-ports.sh" /usr/local/bin/addport
   chmod +x /usr/local/bin/gor-mirror-ports /usr/local/bin/addport || true
 fi
+if [[ -f "$USERSTACK_DST/scripts/refresh-capstone-blueteam-agent.sh" ]]; then
+  ln -sf "$USERSTACK_DST/scripts/refresh-capstone-blueteam-agent.sh" /usr/local/bin/refresh-blueteam-agent
+  chmod +x /usr/local/bin/refresh-blueteam-agent || true
+fi
 
-echo "[5.1/8] Install blueteam agent files"
-if [[ ! -d "$BLUETEAM_AGENT_SRC" ]]; then
-  echo "Missing $BLUETEAM_AGENT_SRC" >&2
+echo "[5.1/8] Clone blueteam agent repository"
+rm -rf "$BLUETEAM_AGENT_DST"
+BLUETEAM_AGENT_GIT_ATTEMPTS="${BLUETEAM_AGENT_GIT_ATTEMPTS:-3}"
+BLUETEAM_AGENT_GIT_DELAY="${BLUETEAM_AGENT_GIT_DELAY:-10}"
+if ! retry "$BLUETEAM_AGENT_GIT_ATTEMPTS" "$BLUETEAM_AGENT_GIT_DELAY" \
+  git clone --depth 1 --branch "$BLUETEAM_AGENT_REPO_REF" --single-branch "$BLUETEAM_AGENT_REPO_URL" "$BLUETEAM_AGENT_DST"; then
+  echo "Blueteam agent git clone failed after ${BLUETEAM_AGENT_GIT_ATTEMPTS} attempts" >&2
   exit 1
 fi
-rm -rf "$BLUETEAM_AGENT_DST"
-mkdir -p "$BLUETEAM_AGENT_DST"
-cp -a "$BLUETEAM_AGENT_SRC"/. "$BLUETEAM_AGENT_DST"/
 
 mkdir -p \
   "$BLUETEAM_AGENT_DST/data" \
@@ -309,7 +315,7 @@ rm -f /var/lib/dbus/machine-id
 ln -sf /etc/machine-id /var/lib/dbus/machine-id
 
 echo "[DONE] Cleanup"
-rm -rf /tmp/capstone-userstack /tmp/capstone-blueteam-agent /tmp/scripts || true
+rm -rf /tmp/capstone-userstack /tmp/scripts || true
 apt-get autoremove -y >/dev/null 2>&1 || true
 apt-get clean >/dev/null 2>&1
 rm -rf /var/lib/apt/lists/* || true
