@@ -82,6 +82,11 @@ variable "ballooning_minimum" {
   default = 0
 }
 
+variable "cpu_type" {
+  type    = string
+  default = "x86-64-v2-AES"
+}
+
 variable "disk_size" {
   type    = string
   default = "100G"

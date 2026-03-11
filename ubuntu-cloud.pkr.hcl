@@ -48,6 +48,7 @@ source "proxmox-iso" "ubuntu-server" {
   cores              = var.cores
   memory             = var.memory
   ballooning_minimum = var.ballooning_minimum
+  cpu_type           = var.cpu_type
 
   network_adapters {
     model    = "virtio"

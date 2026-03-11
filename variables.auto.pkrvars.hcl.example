@@ -8,6 +8,7 @@ iso_storage     = "hdd-data"
 cores              = 4
 memory             = 6144
 ballooning_minimum = 0
+cpu_type           = "x86-64-v2-AES"
 disk_size          = "100G"
 
 lan_vlan_tag = 10
