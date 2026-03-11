@@ -285,13 +285,20 @@ if command -v docker >/dev/null 2>&1; then
   fi
   COMPOSE_PULL_ATTEMPTS="${COMPOSE_PULL_ATTEMPTS:-3}"
   COMPOSE_PULL_DELAY="${COMPOSE_PULL_DELAY:-10}"
+  FRONTEND_BUILD_ATTEMPTS="${FRONTEND_BUILD_ATTEMPTS:-2}"
+  FRONTEND_BUILD_DELAY="${FRONTEND_BUILD_DELAY:-10}"
   cd "$USERSTACK_DST"
   if ! retry "$COMPOSE_PULL_ATTEMPTS" "$COMPOSE_PULL_DELAY" docker compose pull; then
     echo "Docker compose pull failed after ${COMPOSE_PULL_ATTEMPTS} attempts" >&2
     exit 1
   fi
 
-  echo "[6.1/8] Pre-pull blueteam agent images"
+  echo "[6.1/8] Pre-build nginx-love frontend image cache"
+  if ! retry "$FRONTEND_BUILD_ATTEMPTS" "$FRONTEND_BUILD_DELAY" docker compose build --pull frontend; then
+    echo "Warning: docker compose build --pull frontend failed after ${FRONTEND_BUILD_ATTEMPTS} attempts; continuing without prebuilt frontend cache" >&2
+  fi
+
+  echo "[6.2/8] Pre-pull blueteam agent images"
   cd "$BLUETEAM_AGENT_DST"
   if ! retry "$COMPOSE_PULL_ATTEMPTS" "$COMPOSE_PULL_DELAY" docker compose pull; then
     echo "Blueteam agent docker compose pull failed after ${COMPOSE_PULL_ATTEMPTS} attempts" >&2

@@ -1,6 +1,6 @@
 # Capstone Userstack (nginx-love)
 
-This repo builds a VM template that ships a pre-pulled nginx-love stack and a small set of helper scripts to configure it on first boot.
+This repo builds a VM template that ships a pre-pulled nginx-love stack, pre-builds the frontend image cache when possible, and provides a small set of helper scripts to configure it on first boot.
 It also clones the BlueAgent repository into `/opt/capstone-blueteam-agent`, pre-pulls its images, and leaves it ready for later `git pull` updates.
 
 **What is included**
@@ -36,6 +36,7 @@ The script runs in this order:
   - `CORS_ORIGIN="http://localhost:8080,http://localhost:5173,http://<public_domain>"`
   - `VITE_API_URL=http://<public_domain>/api`
 - Starts `docker compose up -d --build` with retries.
+  The template build already attempts `docker compose build --pull frontend`, so later clone-time rebuilds can reuse cached layers instead of fetching npm packages again.
 - Waits for `http://127.0.0.1:3001/api/health` to be ready.
 - Runs `bootstrap-nginx_love.sh` to change the admin password and disable ModSecurity rules.
 - If password change succeeds, it **syncs** `.env`:
@@ -125,6 +126,7 @@ Notes:
 - The build clones `https://github.com/CyberSecN00bers/Blueteam-Agent-Minimal.git` (branch `main` by default).
 - If `.env.example` exists and `.env` is missing, the build copies `.env.example` to `.env`.
 - Images are pre-pulled during provisioning with `docker compose pull`.
+- The nginx-love frontend is also pre-built during provisioning with `docker compose build --pull frontend`; if that cache step fails, the template build still continues.
 - The stack is intentionally not enabled or started by default yet.
 
 To refresh later without rebuilding the template:
