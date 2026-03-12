@@ -468,6 +468,7 @@ build_gor_args_for_spec() {
   local endpoint
 
   GOR_ARGS=(
+    --http-original-host
     --input-raw-engine "$RAW_ENGINE"
     --output-http "$TARGET_URL"
   )
