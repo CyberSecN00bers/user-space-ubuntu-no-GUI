@@ -87,9 +87,12 @@ Notes:
 
 ## addport / gor-mirror-ports (GoReplay helper)
 
+This helper mirrors traffic from ports you choose into the replay target. If a chosen port is Docker-published, the helper auto-detects the Docker bridge/interface for that port.
+
 Usage:
 ```bash
-sudo addport 8080 3001
+sudo addport start 8081
+sudo addport start 3000
 ```
 
 This merges the provided ports into the saved list, restarts `gor` in the background, and forwards captured HTTP traffic to `http://127.0.0.1:60085`.
@@ -97,8 +100,9 @@ This merges the provided ports into the saved list, restarts `gor` in the backgr
 Other commands:
 ```bash
 sudo addport 8081
-sudo addport start 80 8080 3000
-sudo addport remove 3001
+sudo addport 3000
+sudo addport run 8081
+sudo addport remove 8081
 sudo addport status
 sudo addport stop
 ```
@@ -106,8 +110,12 @@ sudo addport stop
 Notes:
 - Default capture scope uses GoReplay's pseudo-interface: `GOR_LISTEN_HOST=any`.
 - Set `GOR_LISTEN_HOST=localhost` if you want loopback-only capture.
-- To capture traffic from a real NIC instead, use `GOR_LISTEN_HOST=` with `GOR_RAW_INTERFACE=<iface>`, for example `sudo GOR_LISTEN_HOST= GOR_RAW_INTERFACE=eth0 addport 80 8080`.
-- Override `GOR_TARGET_URL`, `GOR_LISTEN_HOST`, or `GOR_RAW_INTERFACE` if you need a different replay target or capture scope.
+- For Docker-published ports such as `3000:80` or `8081:8081`, `addport` auto-detects the Docker bridge/interface and captures the internal container-side port automatically. In the normal flow, admins should still only run `sudo addport start <host-port>`.
+- If you want to force a real NIC or a specific interface, use `GOR_LISTEN_HOST=` with `GOR_RAW_INTERFACE=<iface>`, for example `sudo GOR_LISTEN_HOST= GOR_RAW_INTERFACE=eth0 addport 80 8080`.
+- When `GOR_RAW_INTERFACE` is set, the helper auto-adds `--input-raw-bpf-filter 'tcp and (dst port ...)'` unless you override `GOR_BPF_FILTER`. This avoids the broken auto-generated host filter that older `gor` builds can apply on Docker `veth`/bridge interfaces.
+- `GOR_BPF_FILTER`, `GOR_RAW_INTERFACE`, and `GOR_LISTEN_HOST` are expert/debug overrides. They should not be needed for the normal Docker-published port flow.
+- Docker auto-detection applies to all Docker-published ports by default. Override `GOR_AUTO_DETECT_DOCKER_PORTS` only if you intentionally want to limit that behavior.
+- Override `GOR_TARGET_URL`, `GOR_LISTEN_HOST`, `GOR_RAW_INTERFACE`, or `GOR_BPF_FILTER` only if you need a different replay target or custom capture scope.
 - The helper only forwards traffic. Nothing in the current stack needs to listen on port `60085` yet.
 
 ## Auto-start on Boot
