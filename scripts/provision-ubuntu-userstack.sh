@@ -118,11 +118,33 @@ echo "[4.1/8] Install goreplay"
 GOREPLAY_VERSION="${GOREPLAY_VERSION:-1.3.3}"
 GOREPLAY_TARBALL="/tmp/goreplay-${GOREPLAY_VERSION}.tar.gz"
 GOREPLAY_SRC_DIR="/tmp/goreplay-${GOREPLAY_VERSION}"
+download_with_retry() {
+  local output_path="$1"
+  shift
+  local url
+
+  for url in "$@"; do
+    if curl --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 15 --max-time 300 -fL -o "$output_path" "$url"; then
+      return 0
+    fi
+  done
+
+  return 1
+}
 apt-get update -y >/dev/null
-apt-get install -y --no-install-recommends build-essential golang-go libpcap-dev >/dev/null
+apt-get install -y --no-install-recommends build-essential golang-go libpcap-dev git >/dev/null
 rm -rf "$GOREPLAY_SRC_DIR" "$GOREPLAY_TARBALL"
-curl -fL -o "$GOREPLAY_TARBALL" "https://github.com/buger/goreplay/archive/refs/tags/${GOREPLAY_VERSION}.tar.gz"
-tar -xzf "$GOREPLAY_TARBALL" -C /tmp
+if download_with_retry \
+  "$GOREPLAY_TARBALL" \
+  "https://github.com/buger/goreplay/archive/refs/tags/${GOREPLAY_VERSION}.tar.gz" \
+  "https://codeload.github.com/buger/goreplay/tar.gz/refs/tags/${GOREPLAY_VERSION}" \
+  "https://github.com/probelabs/goreplay/archive/refs/tags/${GOREPLAY_VERSION}.tar.gz" \
+  "https://codeload.github.com/probelabs/goreplay/tar.gz/refs/tags/${GOREPLAY_VERSION}"
+then
+  tar -xzf "$GOREPLAY_TARBALL" -C /tmp
+else
+  git clone --depth 1 --branch "${GOREPLAY_VERSION}" https://github.com/buger/goreplay.git "$GOREPLAY_SRC_DIR"
+fi
 pushd "$GOREPLAY_SRC_DIR" >/dev/null
 go build -o gor
 install -d -m 0755 /usr/local/bin
