@@ -7,7 +7,7 @@ PORTS_FILE="${GOR_PORTS_FILE:-${STATE_DIR}/gor-mirror-ports.txt}"
 PID_FILE="${GOR_PID_FILE:-/run/capstone-gor-mirror.pid}"
 LOG_FILE="${GOR_LOG_FILE:-/var/log/capstone-gor-mirror.log}"
 TARGET_URL="${GOR_TARGET_URL:-http://127.0.0.1:60085}"
-LISTEN_HOST="${GOR_LISTEN_HOST:-localhost}"
+LISTEN_HOST="${GOR_LISTEN_HOST:-any}"
 RAW_ENGINE="${GOR_RAW_ENGINE:-libpcap}"
 RAW_INTERFACE="${GOR_RAW_INTERFACE:-}"
 
@@ -33,7 +33,7 @@ Behavior:
 
 Overrides:
   - GOR_TARGET_URL     (default: http://127.0.0.1:60085)
-  - GOR_LISTEN_HOST    (default: localhost)
+  - GOR_LISTEN_HOST    (default: any)
   - GOR_RAW_INTERFACE  (default: empty; used when GOR_LISTEN_HOST is empty)
   - GOR_RAW_ENGINE     (default: libpcap)
 EOF
